@@ -25,17 +25,8 @@ jQuery( function( $ ) {
 	 */
 	var wc_stripe_form = {
 		/**
-		 * Get WC AJAX endpoint URL.
-		 *
-		 * @param  {String} endpoint Endpoint.
-		 * @return {String}
+		 * Unmounts the elements created by `mountElements` on checkout updates.
 		 */
-		getAjaxURL: function( endpoint ) {
-			return wc_stripe_params.ajaxurl
-				.toString()
-				.replace( '%%endpoint%%', 'wc_stripe_' + endpoint );
-		},
-
 		unmountElements: function() {
 			if ( 'yes' === wc_stripe_params.inline_cc_form ) {
 				stripe_card.unmount( '#stripe-card-element' );
@@ -46,6 +37,9 @@ jQuery( function( $ ) {
 			}
 		},
 
+		/**
+		 * Mounts inline card elements.
+		 */
 		mountElements: function() {
 			if ( ! $( '#stripe-card-element' ).length ) {
 				return;
@@ -60,6 +54,10 @@ jQuery( function( $ ) {
 			}
 		},
 
+		/**
+		 * Creates Stripe's checkout elements and saves them as semi-global object variables.
+		 * Those objects are later used to mount Stripe's elements to DOM nodes.
+		 */
 		createElements: function() {
 			var elementStyles = {
 				base: {
@@ -149,6 +147,12 @@ jQuery( function( $ ) {
 			}
 		},
 
+		/**
+		 * Updates the credit card brand image when separate card elements are used.
+		 * When an inline CC form is chosen, this method is not being used.
+		 *
+		 * @param {string} brand The identifier of the CC brand.
+		 */
 		updateCardBrand: function( brand ) {
 			var brandClass = {
 				'visa': 'stripe-visa-brand',
@@ -187,7 +191,13 @@ jQuery( function( $ ) {
 			// Stripe Checkout.
 			this.stripe_checkout_submit = false;
 
-			// checkout page
+			/**
+			 * ToDo: The conditionals for the selection of `this.form` and event listeners
+			 * seem to be slightly mixed-up. Should we check what forms appear where and
+			 * minimize the nil calls?
+			 */
+
+			// Checkout page
 			if ( $( 'form.woocommerce-checkout' ).length ) {
 				this.form = $( 'form.woocommerce-checkout' );
 			}
@@ -301,11 +311,6 @@ jQuery( function( $ ) {
 			return 0 < $( 'input.stripe-intent' ).length;
 		},
 
-		// Legacy
-		hasToken: function() {
-			return 0 < $( 'input.stripe_token' ).length;
-		},
-
 		isMobile: function() {
 			if( /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ) {
 				return true;
@@ -315,11 +320,11 @@ jQuery( function( $ ) {
 		},
 
 		isStripeModalNeeded: function( e ) {
-			var token = wc_stripe_form.form.find( 'input.stripe_token' ),
+			var intentId = wc_stripe_form.form.find( 'input.stripe_intent' ),
 				$required_inputs;
 
-			// If this is a stripe submission (after modal) and token exists, allow submit.
-			if ( wc_stripe_form.stripe_submit && token ) {
+			// If this is a stripe submission (after modal) and a successful intent exists, allow submit.
+			if ( wc_stripe_form.stripe_submit && intentId ) {
 				return false;
 			}
 
@@ -545,7 +550,10 @@ jQuery( function( $ ) {
 				if ( 'sepa_debit' === source_type ) {
 					stripe.createSource( iban, extra_details ).then( wc_stripe_form.sourceResponse );
 				} else {
-					stripe.createSource( extra_details ).then( wc_stripe_form.sourceResponse );
+					// stripe.createSource( extra_details ).then( wc_stripe_form.sourceResponse );
+					stripe.confirmPaymentIntent( client_secret, {
+						source_data: extra_details,
+					} ).then( wc_stripe_form.sourceResponse );
 				}
 			}
 		},
@@ -576,7 +584,7 @@ jQuery( function( $ ) {
 				return;
 			}
 
-			if ( ! wc_stripe_form.isStripeSaveCardChosen() && ! wc_stripe_form.hasIntent() && ! wc_stripe_form.hasToken() ) {
+			if ( ! wc_stripe_form.isStripeSaveCardChosen() && ! wc_stripe_form.hasIntent() ) {
 				e.preventDefault();
 
 				wc_stripe_form.block();
@@ -660,7 +668,7 @@ jQuery( function( $ ) {
 		},
 
 		reset: function() {
-			$( '.wc-stripe-error, .stripe-source, .stripe_token' ).remove();
+			$( '.wc-stripe-error, .stripe-source, .stripe_intent' ).remove();
 
 			// Stripe Checkout.
 			if ( 'yes' === wc_stripe_params.is_stripe_checkout ) {
